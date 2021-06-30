@@ -13,6 +13,9 @@ import com.songoda.ultimatecatcher.egg.CEgg;
 import com.songoda.ultimatecatcher.settings.Settings;
 import com.songoda.ultimatecatcher.tasks.EggTrackingTask;
 import com.songoda.ultimatecatcher.utils.EntityUtils;
+import me.ryanhamshire.GriefPrevention.Claim;
+import me.ryanhamshire.GriefPrevention.DataStore;
+import me.ryanhamshire.GriefPrevention.GriefPrevention;
 import org.bukkit.*;
 import org.bukkit.block.BlockFace;
 import org.bukkit.configuration.ConfigurationSection;
@@ -53,42 +56,86 @@ public class EntityListeners implements Listener {
     }
 
     private boolean useEgg(Player player, ItemStack item, CompatibleHand hand) {
-        if (item.getItemMeta().hasDisplayName()) {
-            String name = item.getItemMeta().getDisplayName().replace(String.valueOf(ChatColor.COLOR_CHAR), "");
+        Location location = player.getEyeLocation();
 
-            if (!NmsManager.getNbt().of(item).has("UCI")
+        Claim claim = GriefPrevention.instance.dataStore.getClaimAt(location, true, GriefPrevention.instance.dataStore.getClaim(DataStore.getChunkHash(location)));
 
-                    // Legacy Crap
-                    && !name.startsWith("UCI;") && !name.startsWith("UCI-")) return false;
+        if(claim != null){ // Claim
+            if (item.getItemMeta().hasDisplayName() && claim.canSiege(player)) { // Check claim permissions
+                String name = item.getItemMeta().getDisplayName().replace(String.valueOf(ChatColor.COLOR_CHAR), "");
 
-            if (oncePerTick.contains(player.getUniqueId())) return true;
+                if (!NmsManager.getNbt().of(item).has("UCI")
 
-            String eggType;
-            if (NmsManager.getNbt().of(item).has("UCI")) {
-                eggType = NmsManager.getNbt().of(item).getNBTObject("type").asString();
+                        // Legacy Crap
+                        && !name.startsWith("UCI;") && !name.startsWith("UCI-")) return false;
+
+                if (oncePerTick.contains(player.getUniqueId())) return true;
+
+                String eggType;
+                if (NmsManager.getNbt().of(item).has("UCI")) {
+                    eggType = NmsManager.getNbt().of(item).getNBTObject("type").asString();
+                } else {
+                    // More legacy crap.
+                    String[] split = name.split(";");
+                    eggType = split.length == 3 ? split[1] : plugin.getEggManager().getFirstEgg().getKey();
+                }
+
+                Egg egg = location.getWorld().spawn(location, Egg.class);
+                egg.setCustomName("UCI;" + eggType);
+                egg.setShooter(player);
+
+                oncePerTick.add(player.getUniqueId());
+                Bukkit.getScheduler().scheduleSyncDelayedTask(plugin, () -> oncePerTick.remove(player.getUniqueId()), 1L);
+
+                eggs.put(egg.getUniqueId(), player.getUniqueId());
+
+                location.getWorld().playSound(location, CompatibleSound.ENTITY_EGG_THROW.getSound(), 1L, 1L);
+
+                egg.setVelocity(player.getLocation().getDirection().normalize().multiply(2));
+
+                if (player.getGameMode() != GameMode.CREATIVE)
+                    ItemUtils.takeActiveItem(player, hand);
+                return true;
             } else {
-                // More legacy crap.
-                String[] split = name.split(";");
-                eggType = split.length == 3 ? split[1] : plugin.getEggManager().getFirstEgg().getKey();
+                return false;
             }
+        } else { // No claim
+            if (item.getItemMeta().hasDisplayName()) {
+                String name = item.getItemMeta().getDisplayName().replace(String.valueOf(ChatColor.COLOR_CHAR), "");
 
-            Location location = player.getEyeLocation();
-            Egg egg = location.getWorld().spawn(location, Egg.class);
-            egg.setCustomName("UCI;" + eggType);
-            egg.setShooter(player);
+                if (!NmsManager.getNbt().of(item).has("UCI")
 
-            oncePerTick.add(player.getUniqueId());
-            Bukkit.getScheduler().scheduleSyncDelayedTask(plugin, () -> oncePerTick.remove(player.getUniqueId()), 1L);
+                        // Legacy Crap
+                        && !name.startsWith("UCI;") && !name.startsWith("UCI-")) return false;
 
-            eggs.put(egg.getUniqueId(), player.getUniqueId());
+                if (oncePerTick.contains(player.getUniqueId())) return true;
 
-            location.getWorld().playSound(location, CompatibleSound.ENTITY_EGG_THROW.getSound(), 1L, 1L);
+                String eggType;
+                if (NmsManager.getNbt().of(item).has("UCI")) {
+                    eggType = NmsManager.getNbt().of(item).getNBTObject("type").asString();
+                } else {
+                    // More legacy crap.
+                    String[] split = name.split(";");
+                    eggType = split.length == 3 ? split[1] : plugin.getEggManager().getFirstEgg().getKey();
+                }
 
-            egg.setVelocity(player.getLocation().getDirection().normalize().multiply(2));
+                Egg egg = location.getWorld().spawn(location, Egg.class);
+                egg.setCustomName("UCI;" + eggType);
+                egg.setShooter(player);
 
-            if (player.getGameMode() != GameMode.CREATIVE)
-                ItemUtils.takeActiveItem(player, hand);
-            return true;
+                oncePerTick.add(player.getUniqueId());
+                Bukkit.getScheduler().scheduleSyncDelayedTask(plugin, () -> oncePerTick.remove(player.getUniqueId()), 1L);
+
+                eggs.put(egg.getUniqueId(), player.getUniqueId());
+
+                location.getWorld().playSound(location, CompatibleSound.ENTITY_EGG_THROW.getSound(), 1L, 1L);
+
+                egg.setVelocity(player.getLocation().getDirection().normalize().multiply(2));
+
+                if (player.getGameMode() != GameMode.CREATIVE)
+                    ItemUtils.takeActiveItem(player, hand);
+                return true;
+            }
         }
 
         return false;
